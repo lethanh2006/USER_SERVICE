@@ -21,26 +21,26 @@ export const registerUser = TryCatch(async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    
-   
+
+
     const newUser = await User.create({
         username,
         password: hashedPassword,
         email
     });
 
-    res.status(201).json({ 
+    res.status(201).json({
         message: "User registered successfully. Please login to receive OTP.",
         user: { id: newUser._id, username: newUser.username }
     });
 });
 
 export const loginUser = TryCatch(async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, email } = req.body;
 
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ username, email });
     if (!user || !user.password) {
-        res.status(400).json({ message: "Invalid username or password." });
+        res.status(400).json({ message: "Invalid username or email." });
         return;
     }
 
@@ -58,8 +58,8 @@ export const loginUser = TryCatch(async (req, res) => {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await redisClient.set(`login_otp:${user.email}`, otp, { EX: 5 * 60 }); 
-    await redisClient.set(rateLimitKey, '1', { EX: 60 }); 
+    await redisClient.set(`login_otp:${user.email}`, otp, { EX: 5 * 60 });
+    await redisClient.set(rateLimitKey, '1', { EX: 60 });
 
 
     const message = {
@@ -69,9 +69,9 @@ export const loginUser = TryCatch(async (req, res) => {
     };
     await publishToQueue("send-otp", message);
 
-    res.status(200).json({ 
+    res.status(200).json({
         message: "OTP sent to your email. Please verify to login.",
-        email: user.email 
+        email: user.email
     });
 });
 
@@ -94,7 +94,7 @@ export const verifyUser = TryCatch(async (req, res) => {
         res.status(400).json({ message: "Invalid OTP." });
         return;
     }
-    
+
     await redisClient.del(otpKey);
 
     const user = await User.findOne({ email });
@@ -103,12 +103,20 @@ export const verifyUser = TryCatch(async (req, res) => {
         return;
     }
 
-    const token = generateToken(user);
+    const userPayload = {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role
+    };
+
+
+    const token = generateToken(userPayload);
 
     res.json({
         message: "User verified successfully.",
         token,
-        user,
+        user: userPayload,
     });
 });
 

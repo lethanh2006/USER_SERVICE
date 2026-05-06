@@ -42,7 +42,7 @@ await redisClient.connect();
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use("/api/v1", userRoutes);
+app.use("/api/user", userRoutes);
 const swaggerSpec = swaggerJsdoc({
     definition: {
         openapi: '3.0.0',

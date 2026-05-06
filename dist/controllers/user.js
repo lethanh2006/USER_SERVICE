@@ -27,10 +27,10 @@ export const registerUser = TryCatch(async (req, res) => {
     });
 });
 export const loginUser = TryCatch(async (req, res) => {
-    const { username, password } = req.body;
-    const user = await User.findOne({ username });
+    const { username, password, email } = req.body;
+    const user = await User.findOne({ username, email });
     if (!user || !user.password) {
-        res.status(400).json({ message: "Invalid username or password." });
+        res.status(400).json({ message: "Invalid username or email." });
         return;
     }
     const isMatch = await bcrypt.compare(password, user.password);
@@ -79,11 +79,17 @@ export const verifyUser = TryCatch(async (req, res) => {
         res.status(404).json({ message: "User not found." });
         return;
     }
-    const token = generateToken(user);
+    const userPayload = {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role
+    };
+    const token = generateToken(userPayload);
     res.json({
         message: "User verified successfully.",
         token,
-        user,
+        user: userPayload,
     });
 });
 export const myProfile = TryCatch(async (req, res) => {

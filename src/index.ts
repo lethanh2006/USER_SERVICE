@@ -57,7 +57,7 @@ const app = express();
 app.use(cors());
 
 app.use(express.json());
-app.use("/api/v1",userRoutes);
+app.use("/api/user", userRoutes);
 
 const swaggerSpec = swaggerJsdoc({
   definition: {
@@ -91,5 +91,5 @@ app.get('/api/docs.json', (req, res) => {
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
-    console.log(`User service is running on port ${port}`);
+  console.log(`User service is running on port ${port}`);
 });

@@ -1,5 +1,4 @@
 import jwt from 'jsonwebtoken';
-// thu vien doc file .env
 import dotenv from 'dotenv';
 dotenv.config();
 
