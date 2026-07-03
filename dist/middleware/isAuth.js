@@ -1,26 +1,18 @@
-import jwt, {} from "jsonwebtoken";
-import dotenv from "dotenv";
-dotenv.config();
 export const isAuth = async (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            res.status(401).json({ message: "Unauthorized" });
+        const base64Payload = req.headers['x-user-payload'];
+        if (!base64Payload) {
+            res.status(401).json({ message: "Unauthorized: Missing identity payload" });
             return;
         }
-        const token = authHeader.split(" ")[1];
-        // verify token
-        const decodedValue = jwt.verify(token, process.env.JWT_SECRET);
-        if (!decodedValue) {
-            res.status(401).json({ message: "Unauthorized" });
-            return;
-        }
-        const { password, ...userWithoutPassword } = decodedValue.user;
-        req.user = userWithoutPassword;
+        // Giải mã payload Base64 do Gateway inject
+        const jsonString = Buffer.from(base64Payload, 'base64').toString('utf8');
+        const userData = JSON.parse(jsonString);
+        req.user = userData;
         next();
     }
     catch (error) {
-        res.status(401).json({ message: "Unauthorized" });
+        res.status(401).json({ message: "Unauthorized: Invalid identity payload" });
     }
 };
 //# sourceMappingURL=isAuth.js.map

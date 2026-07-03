@@ -1,37 +1,25 @@
-import type { IUser } from "../model/User.js";
 import type { Request, Response, NextFunction } from "express";
-import jwt, { type JwtPayload } from "jsonwebtoken";
-import dotenv from "dotenv";
-dotenv.config();
-
-
-
 export interface AuthenticatedRequest extends Request {
-    user?: IUser | null;
-    
+    user?: {
+        _id: string;
+        email: string;
+        username: string;
+        role: string;
+    } | null;
 }
-
-export const isAuth = async (req : AuthenticatedRequest, res: Response, next: NextFunction) :
-    Promise<void> => {
-    try { 
-        const authHeader = req.headers.authorization;
-
-        if(!authHeader || !authHeader.startsWith("Bearer ")) {
-            res.status(401).json({ message: "Unauthorized" });
-            return ;
+export const isAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const base64Payload = req.headers['x-user-payload'];
+        if (!base64Payload) {
+            res.status(401).json({ message: "Unauthorized: Missing identity payload" });
+            return;
         }
-        const token = authHeader.split(" ")[1];
-        // verify token
-        const decodedValue = jwt.verify(token as string, process.env.JWT_SECRET as string) as JwtPayload;
-        if(!decodedValue) {
-            res.status(401).json({ message: "Unauthorized" });
-            return ;
-        }
-        const { password, ...userWithoutPassword } = decodedValue.user;
-        req.user = userWithoutPassword as any;
+        // Giải mã payload Base64 do Gateway inject
+        const jsonString = Buffer.from(base64Payload as string, 'base64').toString('utf8');
+        const userData = JSON.parse(jsonString);
+        req.user = userData;
         next();
-     }
-    catch (error) {
-        res.status(401).json({ message: "Unauthorized" });
+    } catch (error) {
+        res.status(401).json({ message: "Unauthorized: Invalid identity payload" });
     }
 };

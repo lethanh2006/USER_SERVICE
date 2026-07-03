@@ -1,7 +1,11 @@
-import type { IUser } from "../model/User.js";
 import type { Request, Response, NextFunction } from "express";
 export interface AuthenticatedRequest extends Request {
-    user?: IUser | null;
+    user?: {
+        _id: string;
+        email: string;
+        username: string;
+        role: string;
+    } | null;
 }
 export declare const isAuth: (req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<void>;
 //# sourceMappingURL=isAuth.d.ts.map
