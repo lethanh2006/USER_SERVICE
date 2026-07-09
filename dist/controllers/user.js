@@ -63,4 +63,23 @@ export const getAUser = TryCatch(async (req, res) => {
         user,
     });
 });
+export const updateRoleInternal = TryCatch(async (req, res) => {
+    const { id } = req.params;
+    const { role } = req.body;
+    if (!role) {
+        res.status(400).json({ message: "role is required." });
+        return;
+    }
+    const user = await User.findById(id);
+    if (!user) {
+        res.status(404).json({ message: "User profile not found." });
+        return;
+    }
+    user.role = role;
+    await user.save();
+    res.status(200).json({
+        message: "User role updated successfully.",
+        user
+    });
+});
 //# sourceMappingURL=user.js.map
