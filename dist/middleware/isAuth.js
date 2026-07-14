@@ -1,18 +1,10 @@
-export const isAuth = async (req, res, next) => {
-    try {
-        const base64Payload = req.headers['x-user-payload'];
-        if (!base64Payload) {
-            res.status(401).json({ message: "Unauthorized: Missing identity payload" });
-            return;
-        }
-        // Giải mã payload Base64 do Gateway inject
-        const jsonString = Buffer.from(base64Payload, 'base64').toString('utf8');
-        const userData = JSON.parse(jsonString);
-        req.user = userData;
-        next();
+export const isAuth = (req, res, next) => {
+    const payload = req.headers['x-user-payload'];
+    if (!payload) {
+        res.status(401).json({ message: "Unauthorized" });
+        return;
     }
-    catch (error) {
-        res.status(401).json({ message: "Unauthorized: Invalid identity payload" });
-    }
+    req.user = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+    next();
 };
 //# sourceMappingURL=isAuth.js.map

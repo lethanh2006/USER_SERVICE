@@ -7,5 +7,5 @@ export interface AuthenticatedRequest extends Request {
         role: string;
     } | null;
 }
-export declare const isAuth: (req: AuthenticatedRequest, res: Response, next: NextFunction) => Promise<void>;
+export declare const isAuth: (req: AuthenticatedRequest, res: Response, next: NextFunction) => void;
 //# sourceMappingURL=isAuth.d.ts.map
