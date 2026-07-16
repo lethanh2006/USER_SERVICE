@@ -83,3 +83,47 @@ export const updateRoleInternal = TryCatch(async (req, res) => {
         user
     });
 });
+
+export const handleProfileSync = async (message: any) => {
+    const { action, userId, username, email, role } = message;
+    try {
+        if (action === 'CREATE') {
+            const existingUser = await User.findById(userId);
+            if (!existingUser) {
+                await User.create({
+                    _id: userId,
+                    username,
+                    email,
+                    role: role || 'user'
+                });
+                console.log(`[RabbitMQ Sync] Created user profile: ${userId}`);
+            } else {
+                console.log(`[RabbitMQ Sync] User profile already exists: ${userId}`);
+            }
+        } else if (action === 'UPDATE_EMAIL') {
+            const user = await User.findById(userId);
+            if (user) {
+                user.email = email;
+                await user.save();
+                console.log(`[RabbitMQ Sync] Updated user email: ${userId} -> ${email}`);
+            } else {
+                console.warn(`[RabbitMQ Sync] User profile not found for email update: ${userId}`);
+            }
+        } else if (action === 'UPDATE_ROLE') {
+            const user = await User.findById(userId);
+            if (user) {
+                user.role = role;
+                await user.save();
+                console.log(`[RabbitMQ Sync] Updated user role: ${userId} -> ${role}`);
+            } else {
+                console.warn(`[RabbitMQ Sync] User profile not found for role update: ${userId}`);
+            }
+        } else if (action === 'DELETE') {
+            await User.findByIdAndDelete(userId);
+            console.log(`[RabbitMQ Sync] Deleted user profile: ${userId}`);
+        }
+    } catch (error: any) {
+        console.error(`[RabbitMQ Sync] Error processing action ${action}:`, error.message);
+        throw error;
+    }
+};

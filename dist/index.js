@@ -4,13 +4,15 @@ import { connect } from 'mongoose';
 import connectDb from './config/db.js';
 import { createClient } from 'redis';
 import userRoutes from './routes/user.js';
-import { connectRabbitMQ } from './config/rabbitmq.js';
+import { connectRabbitMQ, listenToQueue } from './config/rabbitmq.js';
+import { handleProfileSync } from './controllers/user.js';
 import cors from 'cors';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 dotenv.config();
 connectDb();
-connectRabbitMQ();
+await connectRabbitMQ();
+await listenToQueue('user-profile-sync', handleProfileSync);
 if (!process.env.REDIS_URL) {
     throw new Error('REDIS_URL is not defined');
 }
