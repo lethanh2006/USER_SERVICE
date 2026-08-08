@@ -24,8 +24,13 @@ export const createProfileInternal = TryCatch(async (req, res) => {
     });
 });
 export const myProfile = TryCatch(async (req: AuthenticatedRequest, res) => {
+    const user = await User.findById(req.user?._id);
+    if (!user) {
+        res.status(401).json({ message: "Phiên đăng nhập không còn hợp lệ." });
+        return;
+    }
     res.status(200).json({
-        user: req.user,
+        user,
     });
 });
 export const updateName = TryCatch(async (req: AuthenticatedRequest, res) => {
