@@ -1,4 +1,6 @@
 import TryCatch from "../config/TryCatch.js";
+import type { RabbitMessageMetadata } from "../config/rabbitmq.js";
+import { structuredLogger } from "../common/observability/structured-logger.service.js";
 import type { AuthenticatedRequest } from "../middleware/isAuth.js";
 import { User } from "../model/User.js";
 // Tạo profile của User khi Auth Service thông báo đăng ký thành công
@@ -89,8 +91,17 @@ export const updateRoleInternal = TryCatch(async (req, res) => {
     });
 });
 
-export const handleProfileSync = async (message: any) => {
+export const handleProfileSync = async (
+    message: any,
+    metadata: RabbitMessageMetadata,
+) => {
     const { action, userId, username, email, role } = message;
+    const logContext = {
+        requestId: metadata.requestId ?? "unknown",
+        queueName: metadata.queueName,
+        action,
+        ...(userId ? { userId: String(userId) } : {}),
+    };
     try {
         if (action === 'CREATE') {
             const existingUser = await User.findById(userId);
@@ -101,34 +112,64 @@ export const handleProfileSync = async (message: any) => {
                     email,
                     role: role || 'user'
                 });
-                console.log(`[RabbitMQ Sync] Created user profile: ${userId}`);
+                structuredLogger.info("rabbitmq_message_processed", {
+                    ...logContext,
+                    outcome: "profile_created",
+                });
             } else {
-                console.log(`[RabbitMQ Sync] User profile already exists: ${userId}`);
+                structuredLogger.info("rabbitmq_message_processed", {
+                    ...logContext,
+                    outcome: "profile_already_exists",
+                });
             }
         } else if (action === 'UPDATE_EMAIL') {
             const user = await User.findById(userId);
             if (user) {
                 user.email = email;
                 await user.save();
-                console.log(`[RabbitMQ Sync] Updated user email: ${userId} -> ${email}`);
+                structuredLogger.info("rabbitmq_message_processed", {
+                    ...logContext,
+                    outcome: "email_updated",
+                });
             } else {
-                console.warn(`[RabbitMQ Sync] User profile not found for email update: ${userId}`);
+                structuredLogger.warn("rabbitmq_message_rejected", {
+                    ...logContext,
+                    reason: "profile_not_found",
+                });
             }
         } else if (action === 'UPDATE_ROLE') {
             const user = await User.findById(userId);
             if (user) {
                 user.role = role;
                 await user.save();
-                console.log(`[RabbitMQ Sync] Updated user role: ${userId} -> ${role}`);
+                structuredLogger.info("rabbitmq_message_processed", {
+                    ...logContext,
+                    outcome: "role_updated",
+                });
             } else {
-                console.warn(`[RabbitMQ Sync] User profile not found for role update: ${userId}`);
+                structuredLogger.warn("rabbitmq_message_rejected", {
+                    ...logContext,
+                    reason: "profile_not_found",
+                });
             }
         } else if (action === 'DELETE') {
             await User.findByIdAndDelete(userId);
-            console.log(`[RabbitMQ Sync] Deleted user profile: ${userId}`);
+            structuredLogger.info("rabbitmq_message_processed", {
+                ...logContext,
+                outcome: "profile_deleted",
+            });
         }
-    } catch (error: any) {
-        console.error(`[RabbitMQ Sync] Error processing action ${action}:`, error.message);
+    } catch (error: unknown) {
+        const typedError = error instanceof Error ? error : new Error(String(error));
+        structuredLogger.error(
+            "rabbitmq_message_failed",
+            {
+                ...logContext,
+                errorName: typedError.name,
+                message: typedError.message,
+            },
+            typedError.stack,
+        );
         throw error;
     }
 };

@@ -1,6 +1,12 @@
 import amql from 'amqplib'
+import { SAFE_REQUEST_ID } from '../common/middleware/request-id.middleware.js';
 
 let channel: amql.Channel;
+
+export interface RabbitMessageMetadata {
+    queueName: string;
+    requestId?: string;
+}
 
 export const connectRabbitMQ = async() => {
     try {
@@ -19,15 +25,27 @@ export const connectRabbitMQ = async() => {
     }
 }
 
-export const publishToQueue = async(queueName: string, message: unknown) => {
+export const publishToQueue = async(
+    queueName: string,
+    message: unknown,
+    requestId?: string,
+) => {
     if (!channel) {
         throw new Error('RabbitMQ channel is not initialized. Call connectRabbitMQ first.');
     }
     await channel.assertQueue(queueName, { durable: true });
-    channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), { persistent: true });
+    channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
+        persistent: true,
+        ...(requestId && SAFE_REQUEST_ID.test(requestId)
+            ? { headers: { 'x-request-id': requestId } }
+            : {}),
+    });
 }
 
-export const listenToQueue = async (queueName: string, callback: (message: any) => Promise<void>) => {
+export const listenToQueue = async (
+    queueName: string,
+    callback: (message: any, metadata: RabbitMessageMetadata) => Promise<void>,
+) => {
     if (!channel) {
         throw new Error('RabbitMQ channel is not initialized. Call connectRabbitMQ first.');
     }
@@ -36,7 +54,15 @@ export const listenToQueue = async (queueName: string, callback: (message: any) 
         if (msg) {
             try {
                 const content = JSON.parse(msg.content.toString());
-                await callback(content);
+                const requestIdHeader = msg.properties.headers?.['x-request-id'];
+                const requestId =
+                    typeof requestIdHeader === 'string' && SAFE_REQUEST_ID.test(requestIdHeader)
+                        ? requestIdHeader
+                        : undefined;
+                await callback(content, {
+                    queueName,
+                    ...(requestId ? { requestId } : {}),
+                });
                 channel.ack(msg);
             } catch (error) {
                 console.error(`Error processing message from queue ${queueName}:`, error);
