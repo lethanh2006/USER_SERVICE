@@ -1,33 +1,33 @@
+import { Injectable, Logger } from "@nestjs/common";
+
 export type LogDetails = Record<string, unknown>;
 
 /**
  * Xuất một JSON object trên mỗi dòng stdout/stderr để log collector đọc.
  * Alert Telegram/Discord được cấu hình ở tầng monitoring, không gọi tại đây.
  */
+@Injectable()
 export class StructuredLoggerService {
-    info(event: string, details: LogDetails): void {
-        console.log(this.serialize(event, details));
-    }
+  private readonly logger = new Logger("User");
 
-    warn(event: string, details: LogDetails): void {
-        console.warn(this.serialize(event, details));
-    }
+  info(event: string, details: LogDetails): void {
+    this.logger.log(this.serialize(event, details));
+  }
 
-    error(event: string, details: LogDetails, stack?: string): void {
-        console.error(this.serialize(event, {
-            ...details,
-            ...(stack ? { stack } : {}),
-        }));
-    }
+  warn(event: string, details: LogDetails): void {
+    this.logger.warn(this.serialize(event, details));
+  }
 
-    private serialize(event: string, details: LogDetails): string {
-        return JSON.stringify({
-            timestamp: new Date().toISOString(),
-            service: "user",
-            event,
-            ...details,
-        });
-    }
+  error(event: string, details: LogDetails, stack?: string): void {
+    this.logger.error(this.serialize(event, details), stack);
+  }
+
+  private serialize(event: string, details: LogDetails): string {
+    return JSON.stringify({
+      timestamp: new Date().toISOString(),
+      service: "user",
+      event,
+      ...details,
+    });
+  }
 }
-
-export const structuredLogger = new StructuredLoggerService();

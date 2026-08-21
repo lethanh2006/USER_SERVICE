@@ -1,24 +1,33 @@
-FROM node:20-alpine AS builder
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_VERSION=22-alpine
+
+FROM node:${NODE_VERSION} AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 COPY . .
 
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM node:${NODE_VERSION} AS runner
 
 WORKDIR /app
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package*.json ./
+ENV NODE_ENV=production
 
-RUN npm ci
+COPY --chown=node:node package*.json ./
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && npm cache clean --force
+
+COPY --from=builder --chown=node:node /app/dist ./dist
 
 EXPOSE 5000
 
-CMD ["node", "dist/index.js"]
+USER node
+
+CMD ["npm", "run", "start:prod"]
