@@ -65,17 +65,31 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     const channel = this.channel;
     if (!channel) throw new Error("RabbitMQ channel is not initialized");
 
-    await channel.assertQueue(queueName, { durable: true });
-    const headers = injectTraceHeaders(
-      requestId && SAFE_REQUEST_ID.test(requestId)
-        ? { "x-request-id": requestId }
-        : {},
+    await withMessageSpan(
+      `${queueName} publish`,
+      {},
+      async () => {
+        await channel.assertQueue(queueName, { durable: true });
+        const headers = injectTraceHeaders(
+          requestId && SAFE_REQUEST_ID.test(requestId)
+            ? { "x-request-id": requestId }
+            : {},
+        );
+        channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
+          persistent: true,
+          contentType: "application/json",
+          headers,
+        });
+      },
+      {
+        kind: 3,
+        attributes: {
+          "messaging.system": "rabbitmq",
+          "messaging.destination.name": queueName,
+          "messaging.operation.type": "publish",
+        },
+      },
     );
-    channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
-      persistent: true,
-      contentType: "application/json",
-      headers,
-    });
   }
 
   async onModuleDestroy(): Promise<void> {
