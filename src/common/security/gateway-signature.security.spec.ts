@@ -42,5 +42,13 @@ describe("GatewaySignatureService", () => {
       () =>
         new GatewaySignatureService(new ConfigService({ JWT_SECRET: "short" })),
     ).toThrow("ít nhất 32 byte");
+    expect(
+      () =>
+        new GatewaySignatureService(
+          new ConfigService({
+            JWT_SECRET: "replace_with_at_least_32_random_characters",
+          }),
+        ),
+    ).toThrow("ít nhất 32 byte");
   });
 });
