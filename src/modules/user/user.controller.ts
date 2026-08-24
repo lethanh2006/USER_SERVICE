@@ -11,6 +11,8 @@ import {
 } from "@nestjs/common";
 import { CurrentUser } from "../../common/decorators/user.decorator";
 import { UserPayloadGuard } from "../../common/guards/user-payload.guard";
+import { GatewayIdentityGuard } from "../../common/guards/gateway-identity.guard";
+import { GatewayRoles } from "../../common/decorators/gateway-roles.decorator";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-user.interface";
 import { CreateProfileDto } from "./dto/create-profile.dto";
 import { UpdateNameDto } from "./dto/update-name.dto";
@@ -22,22 +24,28 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Post("internal/create-profile")
+  @UseGuards(GatewayIdentityGuard)
+  @GatewayRoles("admin")
   createProfile(@Body() dto: CreateProfileDto) {
     return this.userService.createProfile(dto);
   }
 
   @Get("internal/:id")
+  // Compatibility có chủ đích: Auth/Chat/Todo chưa có service-signature protocol.
+  // Endpoint chỉ được khóa sau khi các caller đó được migrate trong batch riêng.
   getInternalUser(@Param("id") id: string) {
     return this.userService.getUserById(id);
   }
 
   @Patch("internal/:id/role")
+  @UseGuards(GatewayIdentityGuard)
+  @GatewayRoles("admin")
   updateInternalRole(@Param("id") id: string, @Body() dto: UpdateRoleDto) {
     return this.userService.updateRole(id, dto);
   }
 
   @Get("me")
-  @UseGuards(UserPayloadGuard)
+  @UseGuards(GatewayIdentityGuard)
   getMyProfile(@CurrentUser() user: AuthenticatedUser) {
     return this.userService.getMyProfile(user._id);
   }
@@ -51,12 +59,12 @@ export class UserController {
   @Get("user/:id")
   @UseGuards(UserPayloadGuard)
   getUser(@Param("id") id: string) {
-    return this.userService.getUserById(id);
+    return this.userService.getPublicUserById(id);
   }
 
   @Post("update/user")
   @HttpCode(HttpStatus.OK)
-  @UseGuards(UserPayloadGuard)
+  @UseGuards(GatewayIdentityGuard)
   updateName(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateNameDto,

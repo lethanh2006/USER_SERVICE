@@ -90,6 +90,19 @@ export class UserService {
     return { user };
   }
 
+  async getPublicUserById(userId: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw this.httpError(HttpStatus.NOT_FOUND, "User not found.");
+    }
+    return {
+      user: {
+        _id: user._id,
+        username: user.username,
+      },
+    };
+  }
+
   async updateRole(userId: string, dto: UpdateRoleDto) {
     const user = await this.userModel.findById(userId);
     if (!user) {
