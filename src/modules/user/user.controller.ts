@@ -31,9 +31,16 @@ export class UserController {
   }
 
   @Get("internal/:id")
-  // Compatibility có chủ đích: Auth/Chat/Todo chưa có service-signature protocol.
-  // Endpoint chỉ được khóa sau khi các caller đó được migrate trong batch riêng.
+  // Auth/Chat/Todo còn dùng route tương thích này. Chỉ trả dữ liệu
+  // danh bạ công khai; profile đầy đủ phải đi qua route admin có chữ ký.
   getInternalUser(@Param("id") id: string) {
+    return this.userService.getPublicUserById(id);
+  }
+
+  @Get("internal/admin/:id")
+  @UseGuards(GatewayIdentityGuard)
+  @GatewayRoles("admin")
+  getInternalUserForAdmin(@Param("id") id: string) {
     return this.userService.getUserById(id);
   }
 
