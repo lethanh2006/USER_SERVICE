@@ -51,9 +51,9 @@ export class UserController {
   }
 
   @Get("user/all")
-  @UseGuards(UserPayloadGuard)
-  getAllUsers() {
-    return this.userService.getAllUsers();
+  @UseGuards(GatewayIdentityGuard)
+  getAllUsers(@CurrentUser() user: AuthenticatedUser) {
+    return this.userService.getAllUsers(user);
   }
 
   @Get("user/:id")

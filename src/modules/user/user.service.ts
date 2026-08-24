@@ -7,6 +7,7 @@ import { User, UserDocument } from "../../schemas/user.schema";
 import type { CreateProfileDto } from "./dto/create-profile.dto";
 import type { UpdateNameDto } from "./dto/update-name.dto";
 import type { UpdateRoleDto } from "./dto/update-role.dto";
+import type { AuthenticatedUser } from "../../common/interfaces/authenticated-user.interface";
 
 interface ProfileSyncMessage {
   action?: unknown;
@@ -77,8 +78,18 @@ export class UserService {
     };
   }
 
-  async getAllUsers() {
-    const users = await this.userModel.find();
+  async getAllUsers(viewer: AuthenticatedUser) {
+    const isAdmin = viewer.role?.toLowerCase() === "admin";
+    const users = await this.userModel
+      .find()
+      .select(
+        isAdmin
+          ? { _id: 1, username: 1, email: 1, role: 1 }
+          : { _id: 1, username: 1 },
+      )
+      .sort({ username: 1, _id: 1 })
+      .lean()
+      .exec();
     return { users };
   }
 
