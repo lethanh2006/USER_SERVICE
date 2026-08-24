@@ -5,8 +5,15 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import {
+  createErrorId,
+  injectTraceHeaders,
+  runWithLogContext,
+  withMessageSpan,
+} from "@nrapp/observability";
 import * as amqp from "amqplib";
 import { SAFE_REQUEST_ID } from "../../common/middleware/request-id.middleware";
+import { appLogger } from "../../common/observability/app-logger";
 import { toError } from "../../common/utils/error.util";
 
 export interface RabbitMessageMetadata {
@@ -59,12 +66,15 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     if (!channel) throw new Error("RabbitMQ channel is not initialized");
 
     await channel.assertQueue(queueName, { durable: true });
+    const headers = injectTraceHeaders(
+      requestId && SAFE_REQUEST_ID.test(requestId)
+        ? { "x-request-id": requestId }
+        : {},
+    );
     channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
       persistent: true,
       contentType: "application/json",
-      ...(requestId && SAFE_REQUEST_ID.test(requestId)
-        ? { headers: { "x-request-id": requestId } }
-        : {}),
+      headers,
     });
   }
 
@@ -179,36 +189,75 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     callback: MessageHandler,
     channel: amqp.Channel,
   ): Promise<void> {
-    try {
-      const content = JSON.parse(message.content.toString()) as unknown;
-      const rawHeaders: unknown = message.properties.headers;
-      const requestIdHeader = isRecord(rawHeaders)
-        ? rawHeaders["x-request-id"]
+    const messageHeaders: unknown = message.properties.headers;
+    const rawHeaders: Record<string, unknown> = isRecord(messageHeaders)
+      ? { ...messageHeaders }
+      : {};
+    const requestIdHeader = rawHeaders["x-request-id"];
+    const requestId =
+      typeof requestIdHeader === "string" &&
+      SAFE_REQUEST_ID.test(requestIdHeader)
+        ? requestIdHeader
         : undefined;
-      const requestId =
-        typeof requestIdHeader === "string" &&
-        SAFE_REQUEST_ID.test(requestIdHeader)
-          ? requestIdHeader
-          : undefined;
-      await callback(content, {
-        queueName,
-        ...(requestId ? { requestId } : {}),
-      });
-      channel.ack(message);
-    } catch (exception: unknown) {
-      const error = toError(exception);
-      this.logger.error(
-        `Error processing message from queue ${queueName}: ${error.message}`,
-        error.stack,
-      );
-      try {
-        channel.nack(message, false, false);
-      } catch (nackException: unknown) {
-        this.logger.warn(
-          `Không thể nack RabbitMQ message: ${toError(nackException).message}`,
-        );
-      }
-    }
+
+    await withMessageSpan(
+      `${queueName} process`,
+      rawHeaders,
+      async (span) =>
+        runWithLogContext(
+          { ...(requestId ? { request_id: requestId } : {}) },
+          async () => {
+            try {
+              const content = JSON.parse(message.content.toString()) as unknown;
+              await callback(content, {
+                queueName,
+                ...(requestId ? { requestId } : {}),
+              });
+              channel.ack(message);
+            } catch (exception: unknown) {
+              const error = toError(exception);
+              const errorId = createErrorId();
+              span.setAttribute("error.id", errorId);
+              span.setAttribute("error.code", "MESSAGE_PROCESSING_FAILED");
+              appLogger.error(
+                {
+                  "event.name": "rabbitmq.message.failed",
+                  "error.id": errorId,
+                  "error.code": "MESSAGE_PROCESSING_FAILED",
+                  "error.expected": false,
+                  "messaging.system": "rabbitmq",
+                  "messaging.destination.name": queueName,
+                  "messaging.operation.type": "process",
+                  ...(requestId ? { request_id: requestId } : {}),
+                  "exception.type": error.name,
+                  "exception.message": error.message,
+                  ...(error.stack
+                    ? { "exception.stacktrace": error.stack }
+                    : {}),
+                },
+                "RabbitMQ message processing failed",
+              );
+              try {
+                channel.nack(message, false, false);
+              } catch (nackException: unknown) {
+                this.logger.warn(
+                  `Không thể nack RabbitMQ message: ${
+                    toError(nackException).message
+                  }`,
+                );
+              }
+              throw error;
+            }
+          },
+        ),
+      {
+        attributes: {
+          "messaging.system": "rabbitmq",
+          "messaging.destination.name": queueName,
+          "messaging.operation.type": "process",
+        },
+      },
+    ).catch(() => undefined);
   }
 
   private handleDisconnect(connection: amqp.ChannelModel): void {

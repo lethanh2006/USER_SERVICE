@@ -4,30 +4,29 @@ ARG NODE_VERSION=22-alpine
 
 FROM node:${NODE_VERSION} AS builder
 
-WORKDIR /app
+WORKDIR /workspace/user
 
-COPY package*.json ./
-
+# Build bằng context thư mục backend: docker build -f user/Dockerfile .
+COPY logger/packages/observability /workspace/logger/packages/observability
+COPY user/package.json user/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-COPY . .
-
+COPY user/ ./
 RUN npm run build
 
 FROM node:${NODE_VERSION} AS runner
 
-WORKDIR /app
-
+WORKDIR /workspace/user
 ENV NODE_ENV=production
 
-COPY --chown=node:node package*.json ./
+COPY --chown=node:node logger/packages/observability /workspace/logger/packages/observability
+COPY --chown=node:node user/package.json user/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 
-COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /workspace/user/dist ./dist
 
 EXPOSE 5000
-
 USER node
 
 CMD ["npm", "run", "start:prod"]

@@ -146,89 +146,74 @@ export class UserService {
       ...(rawUserId ? { userId: rawUserId } : {}),
     };
 
-    try {
-      const userId = this.requiredString(message.userId, "userId");
-      if (action === "CREATE") {
-        const existingUser = await this.userModel.findById(userId);
-        if (!existingUser) {
-          await this.userModel.create({
-            _id: userId,
-            username: this.requiredString(message.username, "username"),
-            email: this.requiredString(message.email, "email"),
-            role:
-              typeof message.role === "string" && message.role
-                ? message.role
-                : "user",
-          });
-          this.logger.info("rabbitmq_message_processed", {
-            ...logContext,
-            outcome: "profile_created",
-          });
-        } else {
-          this.logger.info("rabbitmq_message_processed", {
-            ...logContext,
-            outcome: "profile_already_exists",
-          });
-        }
-        return;
-      }
-
-      if (action === "UPDATE_EMAIL") {
-        const user = await this.userModel.findById(userId);
-        if (user) {
-          user.email = this.requiredString(message.email, "email");
-          await user.save();
-          this.logger.info("rabbitmq_message_processed", {
-            ...logContext,
-            outcome: "email_updated",
-          });
-        } else {
-          this.logger.warn("rabbitmq_message_rejected", {
-            ...logContext,
-            reason: "profile_not_found",
-          });
-        }
-        return;
-      }
-
-      if (action === "UPDATE_ROLE") {
-        const user = await this.userModel.findById(userId);
-        if (user) {
-          user.role = this.requiredString(message.role, "role");
-          await user.save();
-          this.logger.info("rabbitmq_message_processed", {
-            ...logContext,
-            outcome: "role_updated",
-          });
-        } else {
-          this.logger.warn("rabbitmq_message_rejected", {
-            ...logContext,
-            reason: "profile_not_found",
-          });
-        }
-        return;
-      }
-
-      if (action === "DELETE") {
-        await this.userModel.findByIdAndDelete(userId);
+    const userId = this.requiredString(message.userId, "userId");
+    if (action === "CREATE") {
+      const existingUser = await this.userModel.findById(userId);
+      if (!existingUser) {
+        await this.userModel.create({
+          _id: userId,
+          username: this.requiredString(message.username, "username"),
+          email: this.requiredString(message.email, "email"),
+          role:
+            typeof message.role === "string" && message.role
+              ? message.role
+              : "user",
+        });
         this.logger.info("rabbitmq_message_processed", {
           ...logContext,
-          outcome: "profile_deleted",
+          outcome: "profile_created",
+        });
+      } else {
+        this.logger.info("rabbitmq_message_processed", {
+          ...logContext,
+          outcome: "profile_already_exists",
         });
       }
-    } catch (exception: unknown) {
-      const error =
-        exception instanceof Error ? exception : new Error(String(exception));
-      this.logger.error(
-        "rabbitmq_message_failed",
-        {
+      return;
+    }
+
+    if (action === "UPDATE_EMAIL") {
+      const user = await this.userModel.findById(userId);
+      if (user) {
+        user.email = this.requiredString(message.email, "email");
+        await user.save();
+        this.logger.info("rabbitmq_message_processed", {
           ...logContext,
-          errorName: error.name,
-          message: error.message,
-        },
-        error.stack,
-      );
-      throw exception;
+          outcome: "email_updated",
+        });
+      } else {
+        this.logger.warn("rabbitmq_message_rejected", {
+          ...logContext,
+          reason: "profile_not_found",
+        });
+      }
+      return;
+    }
+
+    if (action === "UPDATE_ROLE") {
+      const user = await this.userModel.findById(userId);
+      if (user) {
+        user.role = this.requiredString(message.role, "role");
+        await user.save();
+        this.logger.info("rabbitmq_message_processed", {
+          ...logContext,
+          outcome: "role_updated",
+        });
+      } else {
+        this.logger.warn("rabbitmq_message_rejected", {
+          ...logContext,
+          reason: "profile_not_found",
+        });
+      }
+      return;
+    }
+
+    if (action === "DELETE") {
+      await this.userModel.findByIdAndDelete(userId);
+      this.logger.info("rabbitmq_message_processed", {
+        ...logContext,
+        outcome: "profile_deleted",
+      });
     }
   }
 

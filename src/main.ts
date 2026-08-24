@@ -1,13 +1,18 @@
+import "@nrapp/observability/register";
+
 import dns from "dns";
 dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
-import { Logger, ValidationPipe } from "@nestjs/common";
+import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { PinoNestLogger, shutdownTelemetry } from "@nrapp/observability";
 import { AppModule } from "./app.module";
-import { toError } from "./common/utils/error.util";
+import { appLogger } from "./common/observability/app-logger";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: new PinoNestLogger(appLogger, "NestApplication"),
+  });
 
   app.enableShutdownHooks();
   app.enableCors({
@@ -23,16 +28,26 @@ async function bootstrap(): Promise<void> {
 
   const port = process.env.PORT || 5000;
   await app.listen(port);
-  new Logger("Bootstrap").log(
-    `User Service NestJS is running on: http://localhost:${port}`,
+  appLogger.info(
+    {
+      "event.name": "service.started",
+      "server.port": Number(port),
+    },
+    "User service đã khởi động",
   );
 }
 
-void bootstrap().catch((exception: unknown) => {
-  const error = toError(exception);
-  new Logger("Bootstrap").error(
-    `Không thể khởi động dịch vụ người dùng: ${error.message}`,
-    error.stack,
+void bootstrap().catch(async (exception: unknown) => {
+  const error =
+    exception instanceof Error ? exception : new Error(String(exception));
+  appLogger.fatal(
+    {
+      "event.name": "service.bootstrap.failed",
+      error,
+    },
+    "Không thể khởi động dịch vụ người dùng",
   );
+  appLogger.flush();
+  await shutdownTelemetry(3_000);
   process.exitCode = 1;
 });

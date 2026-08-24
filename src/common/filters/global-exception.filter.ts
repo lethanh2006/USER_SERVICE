@@ -1,80 +1,44 @@
 import {
-  ArgumentsHost,
+  type ArgumentsHost,
   Catch,
-  ExceptionFilter,
-  HttpException,
-  HttpStatus,
+  type ExceptionFilter,
   Injectable,
 } from "@nestjs/common";
 import { HttpAdapterHost } from "@nestjs/core";
+import { handleOriginHttpException } from "@nrapp/observability";
 import type { RequestWithContext } from "../interfaces/request-context.interface";
-import { StructuredLoggerService } from "../observability/structured-logger.service";
-import { toError } from "../utils/error.util";
+import { appLogger } from "../observability/app-logger";
 
 @Catch()
 @Injectable()
 export class GlobalExceptionFilter implements ExceptionFilter {
-  constructor(
-    private readonly httpAdapterHost: HttpAdapterHost,
-    private readonly logger: StructuredLoggerService,
-  ) {}
+  constructor(private readonly httpAdapterHost: HttpAdapterHost) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const { httpAdapter } = this.httpAdapterHost;
     const httpContext = host.switchToHttp();
     const request = httpContext.getRequest<RequestWithContext>();
-    const requestContext = request.requestContext;
-    const statusCode =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
-    const error = toError(exception);
-    const details = {
-      requestId: requestContext?.requestId ?? "unknown",
-      ...(request.user?._id ? { userId: request.user._id } : {}),
+    const result = handleOriginHttpException(appLogger, exception, {
+      requestId: request.requestContext?.requestId ?? "unknown",
       method: request.method,
-      path: request.originalUrl ?? request.url,
-      statusCode,
-      durationMs: requestContext
-        ? Number(process.hrtime.bigint() - requestContext.startedAt) / 1e6
-        : 0,
-      errorName: error.name,
-      message: error.message,
-    };
+      route: routeTemplate(request),
+      eventName: "user.http.request.failed",
+    });
 
-    if (statusCode >= 500) {
-      this.logger.error("http_request_failed", details, error.stack);
-    } else {
-      this.logger.warn("http_request_rejected", details);
-    }
-
-    const exceptionResponse =
-      exception instanceof HttpException ? exception.getResponse() : null;
-    const legacyMessageResponse =
-      exceptionResponse !== null &&
-      typeof exceptionResponse === "object" &&
-      !Array.isArray(exceptionResponse) &&
-      Object.keys(exceptionResponse).length === 1 &&
-      typeof (exceptionResponse as Record<string, unknown>).message ===
-        "string";
-    const responseBody = legacyMessageResponse
-      ? exceptionResponse
-      : exceptionResponse !== null &&
-          typeof exceptionResponse === "object" &&
-          !Array.isArray(exceptionResponse)
-        ? {
-            ...(exceptionResponse as Record<string, unknown>),
-            requestId: requestContext?.requestId ?? "unknown",
-          }
-        : {
-            statusCode,
-            message:
-              statusCode >= 500
-                ? "Internal server error"
-                : (exceptionResponse ?? error.message),
-            requestId: requestContext?.requestId ?? "unknown",
-          };
-
-    httpAdapter.reply(httpContext.getResponse(), responseBody, statusCode);
+    this.httpAdapterHost.httpAdapter.reply(
+      httpContext.getResponse(),
+      result.body,
+      result.statusCode,
+    );
   }
+}
+
+function routeTemplate(request: RequestWithContext): string {
+  const route: unknown = request.route;
+  const routePath = isRecord(route) ? route.path : undefined;
+  if (typeof routePath !== "string") return "unknown";
+  return `${request.baseUrl ?? ""}${routePath}` || "/";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
