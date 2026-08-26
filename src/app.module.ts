@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
 import { CoreModule } from './core/core.module';
 import { DatabaseModule } from './modules/database/database.module';
 import { HealthModule } from './modules/health/health.module';
@@ -19,6 +18,5 @@ import { UserModule } from './modules/user/user.module';
     HealthModule,
     UserModule,
   ],
-  controllers: [AppController],
 })
 export class AppModule {}
