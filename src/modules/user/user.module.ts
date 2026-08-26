@@ -5,18 +5,12 @@ import { UserController } from './user.controller';
 import { UserProfileSyncConsumer } from './user-profile-sync.consumer';
 import { UserService } from './user.service';
 import { GatewayIdentityGuard } from '../../common/guards/gateway-identity.guard';
-import { GatewaySignatureService } from '../../common/security/gateway-signature.service';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
   ],
   controllers: [UserController],
-  providers: [
-    UserService,
-    UserProfileSyncConsumer,
-    GatewayIdentityGuard,
-    GatewaySignatureService,
-  ],
+  providers: [UserService, UserProfileSyncConsumer, GatewayIdentityGuard],
 })
 export class UserModule {}
