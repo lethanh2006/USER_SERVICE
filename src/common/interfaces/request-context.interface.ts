@@ -1,5 +1,5 @@
-import type { Request } from "express";
-import type { AuthenticatedUser } from "./authenticated-user.interface";
+import type { Request } from 'express';
+import type { AuthenticatedUser } from './authenticated-user.interface';
 
 /** Dữ liệu theo suốt một HTTP request để tracing và logging. */
 export interface RequestContext {

@@ -4,14 +4,14 @@ import {
   ForbiddenException,
   Injectable,
   UnauthorizedException,
-} from "@nestjs/common";
-import { Reflector } from "@nestjs/core";
-import { GATEWAY_ROLES_KEY } from "../decorators/gateway-roles.decorator";
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { GATEWAY_ROLES_KEY } from '../decorators/gateway-roles.decorator';
 import {
   parseAuthenticatedUser,
   RequestWithAuthenticatedUser,
-} from "../interfaces/authenticated-user.interface";
-import { GatewaySignatureService } from "../security/gateway-signature.service";
+} from '../interfaces/authenticated-user.interface';
+import { GatewaySignatureService } from '../security/gateway-signature.service';
 
 @Injectable()
 export class GatewayIdentityGuard implements CanActivate {
@@ -24,17 +24,17 @@ export class GatewayIdentityGuard implements CanActivate {
     const request = context
       .switchToHttp()
       .getRequest<RequestWithAuthenticatedUser>();
-    const payload = this.headerValue(request.headers["x-user-payload"]);
+    const payload = this.headerValue(request.headers['x-user-payload']);
     if (!payload) {
-      throw new UnauthorizedException("Thiếu thông tin định danh người dùng");
+      throw new UnauthorizedException('Thiếu thông tin định danh người dùng');
     }
 
     this.signatureService.assertTrusted({
       context: `${request.method.toUpperCase()}:${request.path}`,
       payload,
-      requestId: this.headerValue(request.headers["x-request-id"]),
-      signature: this.headerValue(request.headers["x-user-signature"]),
-      timestamp: this.headerValue(request.headers["x-user-timestamp"]),
+      requestId: this.headerValue(request.headers['x-request-id']),
+      signature: this.headerValue(request.headers['x-user-signature']),
+      timestamp: this.headerValue(request.headers['x-user-timestamp']),
     });
 
     const identity = this.parseIdentity(payload);
@@ -49,7 +49,7 @@ export class GatewayIdentityGuard implements CanActivate {
         (role) => identity.role?.toLowerCase() === role.toLowerCase(),
       )
     ) {
-      throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này");
+      throw new ForbiddenException('Bạn không có quyền thực hiện thao tác này');
     }
 
     return true;
@@ -58,17 +58,17 @@ export class GatewayIdentityGuard implements CanActivate {
   private headerValue(
     value: string | string[] | undefined,
   ): string | undefined {
-    return typeof value === "string" ? value : undefined;
+    return typeof value === 'string' ? value : undefined;
   }
 
   private parseIdentity(payload: string) {
     try {
-      const decoded = Buffer.from(payload, "base64").toString("utf8");
+      const decoded = Buffer.from(payload, 'base64').toString('utf8');
       const identity = parseAuthenticatedUser(JSON.parse(decoded) as unknown);
-      if (!identity) throw new Error("Invalid identity");
+      if (!identity) throw new Error('Invalid identity');
       return identity;
     } catch {
-      throw new UnauthorizedException("Thông tin định danh không hợp lệ");
+      throw new UnauthorizedException('Thông tin định danh không hợp lệ');
     }
   }
 }

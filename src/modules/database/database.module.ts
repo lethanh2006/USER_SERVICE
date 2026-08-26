@@ -1,6 +1,6 @@
-import { Module } from "@nestjs/common";
-import { ConfigModule, ConfigService } from "@nestjs/config";
-import { MongooseModule } from "@nestjs/mongoose";
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { MongooseModule } from '@nestjs/mongoose';
 
 @Module({
   imports: [
@@ -8,12 +8,12 @@ import { MongooseModule } from "@nestjs/mongoose";
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const uri = configService.get<string>("MONGO_URL");
-        if (!uri) throw new Error("MONGO_URL is not defined");
+        const uri = configService.get<string>('MONGO_URL');
+        if (!uri) throw new Error('MONGO_URL is not defined');
 
         return {
           uri,
-          dbName: configService.get<string>("MONGO_DB_NAME") || "nrapp",
+          dbName: configService.get<string>('MONGO_DB_NAME') || 'nrapp',
         };
       },
     }),

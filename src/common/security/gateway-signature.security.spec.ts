@@ -1,21 +1,21 @@
-import { ConfigService } from "@nestjs/config";
-import { createHmac } from "node:crypto";
-import { GatewaySignatureService } from "./gateway-signature.service";
+import { ConfigService } from '@nestjs/config';
+import { createHmac } from 'node:crypto';
+import { GatewaySignatureService } from './gateway-signature.service';
 
-describe("GatewaySignatureService", () => {
-  const secret = "0123456789abcdef0123456789abcdef";
+describe('GatewaySignatureService', () => {
+  const secret = '0123456789abcdef0123456789abcdef';
 
-  it("chấp nhận chữ ký đúng và ràng buộc method/path", () => {
+  it('chấp nhận chữ ký đúng và ràng buộc method/path', () => {
     const service = new GatewaySignatureService(
       new ConfigService({ JWT_SECRET: secret }),
     );
     const timestamp = Date.now().toString();
-    const context = "GET:/api/user/me";
-    const payload = "encoded-user";
-    const requestId = "request-123";
-    const signature = createHmac("sha256", secret)
+    const context = 'GET:/api/user/me';
+    const payload = 'encoded-user';
+    const requestId = 'request-123';
+    const signature = createHmac('sha256', secret)
       .update(`${timestamp}.${requestId}.${payload}.${context}`)
-      .digest("hex");
+      .digest('hex');
 
     expect(() =>
       service.assertTrusted({
@@ -28,27 +28,27 @@ describe("GatewaySignatureService", () => {
     ).not.toThrow();
     expect(() =>
       service.assertTrusted({
-        context: "POST:/api/user/update/user",
+        context: 'POST:/api/user/update/user',
         payload,
         requestId,
         signature,
         timestamp,
       }),
-    ).toThrow("Chữ ký Gateway không hợp lệ");
+    ).toThrow('Chữ ký Gateway không hợp lệ');
   });
 
-  it("từ chối secret yếu", () => {
+  it('từ chối secret yếu', () => {
     expect(
       () =>
-        new GatewaySignatureService(new ConfigService({ JWT_SECRET: "short" })),
-    ).toThrow("ít nhất 32 byte");
+        new GatewaySignatureService(new ConfigService({ JWT_SECRET: 'short' })),
+    ).toThrow('ít nhất 32 byte');
     expect(
       () =>
         new GatewaySignatureService(
           new ConfigService({
-            JWT_SECRET: "replace_with_at_least_32_random_characters",
+            JWT_SECRET: 'replace_with_at_least_32_random_characters',
           }),
         ),
-    ).toThrow("ít nhất 32 byte");
+    ).toThrow('ít nhất 32 byte');
   });
 });

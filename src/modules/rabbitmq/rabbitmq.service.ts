@@ -3,18 +3,18 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
-} from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   createErrorId,
   injectTraceHeaders,
   runWithLogContext,
   withMessageSpan,
-} from "@nrapp/observability";
-import * as amqp from "amqplib";
-import { SAFE_REQUEST_ID } from "../../common/middleware/request-id.middleware";
-import { appLogger } from "../../common/observability/app-logger";
-import { toError } from "../../common/utils/error.util";
+} from '@nrapp/observability';
+import * as amqp from 'amqplib';
+import { SAFE_REQUEST_ID } from '../../common/middleware/request-id.middleware';
+import { appLogger } from '../../common/observability/app-logger';
+import { toError } from '../../common/utils/error.util';
 
 export interface RabbitMessageMetadata {
   queueName: string;
@@ -63,7 +63,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     await this.ensureConnection();
     const channel = this.channel;
-    if (!channel) throw new Error("RabbitMQ channel is not initialized");
+    if (!channel) throw new Error('RabbitMQ channel is not initialized');
 
     await withMessageSpan(
       `${queueName} publish`,
@@ -72,21 +72,21 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         await channel.assertQueue(queueName, { durable: true });
         const headers = injectTraceHeaders(
           requestId && SAFE_REQUEST_ID.test(requestId)
-            ? { "x-request-id": requestId }
+            ? { 'x-request-id': requestId }
             : {},
         );
         channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
           persistent: true,
-          contentType: "application/json",
+          contentType: 'application/json',
           headers,
         });
       },
       {
         kind: 3,
         attributes: {
-          "messaging.system": "rabbitmq",
-          "messaging.destination.name": queueName,
-          "messaging.operation.type": "publish",
+          'messaging.system': 'rabbitmq',
+          'messaging.destination.name': queueName,
+          'messaging.operation.type': 'publish',
         },
       },
     );
@@ -118,21 +118,21 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     if (this.channel || this.shuttingDown) return;
 
     const connection = await amqp.connect({
-      protocol: "amqp",
-      hostname: this.configService.get<string>("Rabbitmq_Host") || "localhost",
+      protocol: 'amqp',
+      hostname: this.configService.get<string>('Rabbitmq_Host') || 'localhost',
       port: Number(
-        this.configService.get<string>("RABBITMQ_AMQP_HOST_PORT") ||
-          this.configService.get<string>("Rabbitmq_Port") ||
+        this.configService.get<string>('RABBITMQ_AMQP_HOST_PORT') ||
+          this.configService.get<string>('Rabbitmq_Port') ||
           5672,
       ),
       username:
-        this.configService.get<string>("RABBITMQ_USER") ||
-        this.configService.get<string>("Rabbitmq_Username") ||
-        "guest",
+        this.configService.get<string>('RABBITMQ_USER') ||
+        this.configService.get<string>('Rabbitmq_Username') ||
+        'guest',
       password:
-        this.configService.get<string>("RABBITMQ_PASSWORD") ||
-        this.configService.get<string>("Rabbitmq_Password") ||
-        "guest",
+        this.configService.get<string>('RABBITMQ_PASSWORD') ||
+        this.configService.get<string>('Rabbitmq_Password') ||
+        'guest',
     });
     if (this.shuttingDown) {
       await connection.close().catch(() => undefined);
@@ -149,15 +149,15 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     this.connection = connection;
     this.channel = channel;
 
-    connection.on("error", (error: Error) => {
+    connection.on('error', (error: Error) => {
       this.logger.warn(`RabbitMQ connection error: ${error.message}`);
     });
-    connection.on("close", () => this.handleDisconnect(connection));
-    channel.on("error", (error: Error) => {
+    connection.on('close', () => this.handleDisconnect(connection));
+    channel.on('error', (error: Error) => {
       this.logger.warn(`RabbitMQ channel error: ${error.message}`);
     });
-    channel.on("close", () => {
-      this.handleChannelUnavailable(channel, "RabbitMQ channel closed");
+    channel.on('close', () => {
+      this.handleChannelUnavailable(channel, 'RabbitMQ channel closed');
     });
 
     try {
@@ -172,7 +172,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       throw exception;
     }
 
-    this.logger.log("Connected to RabbitMQ successfully");
+    this.logger.log('Connected to RabbitMQ successfully');
   }
 
   private async registerSubscription(
@@ -207,9 +207,9 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     const rawHeaders: Record<string, unknown> = isRecord(messageHeaders)
       ? { ...messageHeaders }
       : {};
-    const requestIdHeader = rawHeaders["x-request-id"];
+    const requestIdHeader = rawHeaders['x-request-id'];
     const requestId =
-      typeof requestIdHeader === "string" &&
+      typeof requestIdHeader === 'string' &&
       SAFE_REQUEST_ID.test(requestIdHeader)
         ? requestIdHeader
         : undefined;
@@ -231,25 +231,25 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
             } catch (exception: unknown) {
               const error = toError(exception);
               const errorId = createErrorId();
-              span.setAttribute("error.id", errorId);
-              span.setAttribute("error.code", "MESSAGE_PROCESSING_FAILED");
+              span.setAttribute('error.id', errorId);
+              span.setAttribute('error.code', 'MESSAGE_PROCESSING_FAILED');
               appLogger.error(
                 {
-                  "event.name": "rabbitmq.message.failed",
-                  "error.id": errorId,
-                  "error.code": "MESSAGE_PROCESSING_FAILED",
-                  "error.expected": false,
-                  "messaging.system": "rabbitmq",
-                  "messaging.destination.name": queueName,
-                  "messaging.operation.type": "process",
+                  'event.name': 'rabbitmq.message.failed',
+                  'error.id': errorId,
+                  'error.code': 'MESSAGE_PROCESSING_FAILED',
+                  'error.expected': false,
+                  'messaging.system': 'rabbitmq',
+                  'messaging.destination.name': queueName,
+                  'messaging.operation.type': 'process',
                   ...(requestId ? { request_id: requestId } : {}),
-                  "exception.type": error.name,
-                  "exception.message": error.message,
+                  'exception.type': error.name,
+                  'exception.message': error.message,
                   ...(error.stack
-                    ? { "exception.stacktrace": error.stack }
+                    ? { 'exception.stacktrace': error.stack }
                     : {}),
                 },
-                "RabbitMQ message processing failed",
+                'RabbitMQ message processing failed',
               );
               try {
                 channel.nack(message, false, false);
@@ -266,9 +266,9 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         ),
       {
         attributes: {
-          "messaging.system": "rabbitmq",
-          "messaging.destination.name": queueName,
-          "messaging.operation.type": "process",
+          'messaging.system': 'rabbitmq',
+          'messaging.destination.name': queueName,
+          'messaging.operation.type': 'process',
         },
       },
     ).catch(() => undefined);
@@ -280,7 +280,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     this.channel = null;
     if (this.shuttingDown) return;
 
-    this.logger.warn("RabbitMQ connection closed. Reconnecting...");
+    this.logger.warn('RabbitMQ connection closed. Reconnecting...');
     this.scheduleReconnect();
   }
 
@@ -316,5 +316,5 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

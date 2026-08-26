@@ -1,11 +1,11 @@
-import { Module } from "@nestjs/common";
-import { MongooseModule } from "@nestjs/mongoose";
-import { User, UserSchema } from "../../schemas/user.schema";
-import { UserController } from "./user.controller";
-import { UserProfileSyncConsumer } from "./user-profile-sync.consumer";
-import { UserService } from "./user.service";
-import { GatewayIdentityGuard } from "../../common/guards/gateway-identity.guard";
-import { GatewaySignatureService } from "../../common/security/gateway-signature.service";
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { User, UserSchema } from '../../schemas/user.schema';
+import { UserController } from './user.controller';
+import { UserProfileSyncConsumer } from './user-profile-sync.consumer';
+import { UserService } from './user.service';
+import { GatewayIdentityGuard } from '../../common/guards/gateway-identity.guard';
+import { GatewaySignatureService } from '../../common/security/gateway-signature.service';
 
 @Module({
   imports: [

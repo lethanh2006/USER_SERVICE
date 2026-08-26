@@ -4,11 +4,11 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
-} from "@nestjs/common";
+} from '@nestjs/common';
 import {
   parseAuthenticatedUser,
   RequestWithAuthenticatedUser,
-} from "../interfaces/authenticated-user.interface";
+} from '../interfaces/authenticated-user.interface';
 
 @Injectable()
 export class UserPayloadGuard implements CanActivate {
@@ -16,24 +16,24 @@ export class UserPayloadGuard implements CanActivate {
     const request = context
       .switchToHttp()
       .getRequest<RequestWithAuthenticatedUser>();
-    const payload = request.headers["x-user-payload"];
+    const payload = request.headers['x-user-payload'];
 
-    if (typeof payload !== "string") {
+    if (typeof payload !== 'string') {
       throw new HttpException(
-        { message: "Unauthorized" },
+        { message: 'Unauthorized' },
         HttpStatus.UNAUTHORIZED,
       );
     }
 
     try {
-      const decoded = Buffer.from(payload, "base64").toString("utf8");
+      const decoded = Buffer.from(payload, 'base64').toString('utf8');
       const user = parseAuthenticatedUser(JSON.parse(decoded) as unknown);
-      if (!user) throw new Error("Invalid user payload");
+      if (!user) throw new Error('Invalid user payload');
       request.user = user;
       return true;
     } catch {
       throw new HttpException(
-        { message: "Unauthorized" },
+        { message: 'Unauthorized' },
         HttpStatus.UNAUTHORIZED,
       );
     }

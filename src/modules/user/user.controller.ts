@@ -8,68 +8,68 @@ import {
   Patch,
   Post,
   UseGuards,
-} from "@nestjs/common";
-import { CurrentUser } from "../../common/decorators/user.decorator";
-import { UserPayloadGuard } from "../../common/guards/user-payload.guard";
-import { GatewayIdentityGuard } from "../../common/guards/gateway-identity.guard";
-import { GatewayRoles } from "../../common/decorators/gateway-roles.decorator";
-import type { AuthenticatedUser } from "../../common/interfaces/authenticated-user.interface";
-import { CreateProfileDto } from "./dto/create-profile.dto";
-import { UpdateNameDto } from "./dto/update-name.dto";
-import { UpdateRoleDto } from "./dto/update-role.dto";
-import { UserService } from "./user.service";
+} from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/user.decorator';
+import { UserPayloadGuard } from '../../common/guards/user-payload.guard';
+import { GatewayIdentityGuard } from '../../common/guards/gateway-identity.guard';
+import { GatewayRoles } from '../../common/decorators/gateway-roles.decorator';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { CreateProfileDto } from './dto/create-profile.dto';
+import { UpdateNameDto } from './dto/update-name.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
+import { UserService } from './user.service';
 
-@Controller("api/user")
+@Controller('api/user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  @Post("internal/create-profile")
+  @Post('internal/create-profile')
   @UseGuards(GatewayIdentityGuard)
-  @GatewayRoles("admin")
+  @GatewayRoles('admin')
   createProfile(@Body() dto: CreateProfileDto) {
     return this.userService.createProfile(dto);
   }
 
-  @Get("internal/:id")
+  @Get('internal/:id')
   // Auth/Chat/Todo còn dùng route tương thích này. Chỉ trả dữ liệu
   // danh bạ công khai; profile đầy đủ phải đi qua route admin có chữ ký.
-  getInternalUser(@Param("id") id: string) {
+  getInternalUser(@Param('id') id: string) {
     return this.userService.getPublicUserById(id);
   }
 
-  @Get("internal/admin/:id")
+  @Get('internal/admin/:id')
   @UseGuards(GatewayIdentityGuard)
-  @GatewayRoles("admin")
-  getInternalUserForAdmin(@Param("id") id: string) {
+  @GatewayRoles('admin')
+  getInternalUserForAdmin(@Param('id') id: string) {
     return this.userService.getUserById(id);
   }
 
-  @Patch("internal/:id/role")
+  @Patch('internal/:id/role')
   @UseGuards(GatewayIdentityGuard)
-  @GatewayRoles("admin")
-  updateInternalRole(@Param("id") id: string, @Body() dto: UpdateRoleDto) {
+  @GatewayRoles('admin')
+  updateInternalRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
     return this.userService.updateRole(id, dto);
   }
 
-  @Get("me")
+  @Get('me')
   @UseGuards(GatewayIdentityGuard)
   getMyProfile(@CurrentUser() user: AuthenticatedUser) {
     return this.userService.getMyProfile(user._id);
   }
 
-  @Get("user/all")
+  @Get('user/all')
   @UseGuards(GatewayIdentityGuard)
   getAllUsers(@CurrentUser() user: AuthenticatedUser) {
     return this.userService.getAllUsers(user);
   }
 
-  @Get("user/:id")
+  @Get('user/:id')
   @UseGuards(UserPayloadGuard)
-  getUser(@Param("id") id: string) {
+  getUser(@Param('id') id: string) {
     return this.userService.getPublicUserById(id);
   }
 
-  @Post("update/user")
+  @Post('update/user')
   @HttpCode(HttpStatus.OK)
   @UseGuards(GatewayIdentityGuard)
   updateName(
