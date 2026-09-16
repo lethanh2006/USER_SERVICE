@@ -12,6 +12,8 @@ import {
   withMessageSpan,
 } from '@nrapp/observability';
 import * as amqp from 'amqplib';
+import { randomUUID } from 'node:crypto';
+import { InvalidProfileSyncMessage } from '../user/profile-sync.service';
 import { SAFE_REQUEST_ID } from '../../common/middleware/request-id.middleware';
 import { appLogger } from '../../common/observability/app-logger';
 import { toError } from '../../common/utils/error.util';
@@ -29,7 +31,7 @@ type MessageHandler = (
 @Injectable()
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private connection: amqp.ChannelModel | null = null;
-  private channel: amqp.Channel | null = null;
+  private channel: amqp.ConfirmChannel | null = null;
   private connectionPromise: Promise<void> | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private shuttingDown = false;
@@ -139,7 +141,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const channel = await connection.createChannel();
+    const channel = await connection.createConfirmChannel();
     if (this.shuttingDown) {
       await channel.close().catch(() => undefined);
       await connection.close().catch(() => undefined);
@@ -183,6 +185,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     if (!channel) return;
 
     await channel.assertQueue(queueName, { durable: true });
+    await channel.prefetch(1);
     await channel.consume(queueName, (message) => {
       if (message) {
         void this.processMessage(queueName, message, callback, channel);
@@ -201,7 +204,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     queueName: string,
     message: amqp.ConsumeMessage,
     callback: MessageHandler,
-    channel: amqp.Channel,
+    channel: amqp.ConfirmChannel,
   ): Promise<void> {
     const messageHeaders: unknown = message.properties.headers;
     const rawHeaders: Record<string, unknown> = isRecord(messageHeaders)
@@ -252,7 +255,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
                 'RabbitMQ message processing failed',
               );
               try {
-                channel.nack(message, false, false);
+                const retryable =
+                  !(exception instanceof InvalidProfileSyncMessage) &&
+                  !(exception instanceof SyntaxError);
+                await this.retryOrPark(channel, queueName, message, retryable);
               } catch (nackException: unknown) {
                 this.logger.warn(
                   `Không thể nack RabbitMQ message: ${
@@ -274,6 +280,81 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     ).catch(() => undefined);
   }
 
+  private async retryOrPark(
+    channel: amqp.ConfirmChannel,
+    queueName: string,
+    message: amqp.ConsumeMessage,
+    retryable: boolean,
+  ): Promise<void> {
+    const destination = `${queueName}.${retryable ? 'retry' : 'dead'}`;
+    try {
+      await channel.assertQueue(destination, {
+        durable: true,
+        ...(retryable
+          ? {
+              arguments: {
+                'x-queue-type': 'quorum',
+                'x-dead-letter-strategy': 'at-least-once',
+                'x-overflow': 'reject-publish',
+                'x-message-ttl': 5000,
+                'x-dead-letter-exchange': '',
+                'x-dead-letter-routing-key': queueName,
+              },
+            }
+          : {}),
+      });
+      await new Promise<void>((resolve, reject) => {
+        const messageId = randomUUID();
+        const cleanup = () => {
+          clearTimeout(timer);
+          channel.off('return', onReturn);
+        };
+        const onReturn = (returned: amqp.Message) => {
+          if (returned.properties.messageId !== messageId) return;
+          cleanup();
+          reject(new Error('Retry message was not routed'));
+        };
+        const timer = setTimeout(() => {
+          cleanup();
+          reject(new Error('Retry publish confirm timed out'));
+        }, 10000);
+        channel.on('return', onReturn);
+        try {
+          channel.sendToQueue(
+            destination,
+            message.content,
+            {
+              persistent: true,
+              mandatory: true,
+              messageId,
+              contentType: 'application/json',
+              headers: message.properties.headers,
+            },
+            (error: unknown) => {
+              cleanup();
+              if (error)
+                reject(
+                  error instanceof Error
+                    ? error
+                    : new Error('Retry publish failed'),
+                );
+              else resolve();
+            },
+          );
+        } catch (error: unknown) {
+          cleanup();
+          reject(
+            error instanceof Error ? error : new Error('Retry publish failed'),
+          );
+        }
+      });
+      channel.ack(message);
+    } catch {
+      // Không ack bản gốc nếu chưa lưu được bản retry/DLQ.
+      channel.nack(message, false, true);
+    }
+  }
+
   private handleDisconnect(connection: amqp.ChannelModel): void {
     if (this.connection !== connection) return;
     this.connection = null;
@@ -285,7 +366,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   }
 
   private handleChannelUnavailable(
-    channel: amqp.Channel,
+    channel: amqp.ConfirmChannel,
     reason: string,
   ): void {
     if (this.channel !== channel) return;

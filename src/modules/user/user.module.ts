@@ -1,3 +1,8 @@
+import { ProfileSyncService } from './profile-sync.service';
+import {
+  ProfileSyncState,
+  ProfileSyncStateSchema,
+} from '../../schemas/profile-sync-state.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../../schemas/user.schema';
@@ -8,9 +13,17 @@ import { GatewayIdentityGuard } from '../../common/guards/gateway-identity.guard
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+      { name: ProfileSyncState.name, schema: ProfileSyncStateSchema },
+    ]),
   ],
   controllers: [UserController],
-  providers: [UserService, UserProfileSyncConsumer, GatewayIdentityGuard],
+  providers: [
+    ProfileSyncService,
+    UserService,
+    UserProfileSyncConsumer,
+    GatewayIdentityGuard,
+  ],
 })
 export class UserModule {}

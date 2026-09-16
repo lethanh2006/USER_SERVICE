@@ -1,3 +1,4 @@
+import { InvalidProfileSyncMessage } from './profile-sync.service';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -147,6 +148,8 @@ export class UserService {
     };
 
     const userId = this.requiredString(message.userId, 'userId');
+    if (!/^[a-f0-9]{24}$/i.test(userId))
+      throw new InvalidProfileSyncMessage('Invalid userId');
     if (action === 'CREATE') {
       const existingUser = await this.userModel.findById(userId);
       if (!existingUser) {
@@ -219,14 +222,17 @@ export class UserService {
 
   private toSyncMessage(value: unknown): ProfileSyncMessage {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      throw new Error('RabbitMQ profile sync message must be an object');
+      throw new InvalidProfileSyncMessage(
+        'RabbitMQ profile sync message must be an object',
+      );
     }
     return value;
   }
 
   private requiredString(value: unknown, field: string): string {
     const normalized = typeof value === 'string' ? value : '';
-    if (!normalized) throw new Error(`${field} is required`);
+    if (!normalized)
+      throw new InvalidProfileSyncMessage(`${field} is required`);
     return normalized;
   }
 
