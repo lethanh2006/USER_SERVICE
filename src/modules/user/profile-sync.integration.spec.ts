@@ -50,7 +50,7 @@ integration('User sync với MongoDB replica set thật', () => {
   });
   it('snapshot mới nhất thắng, giữ tên đã đổi và không hồi sinh sau DELETE', async () => {
     const userId = new Types.ObjectId().toString();
-    const latest = event(userId, 3, { action: 'UPDATE_ROLE', role: 'vip' });
+    const latest = event(userId, 3, { action: 'UPDATE_ROLE', role: 'user' });
     await service.handle(latest);
     await users.updateOne({ _id: userId }, { $set: { username: 'Edited' } });
     await service.handle(latest);
@@ -59,12 +59,12 @@ integration('User sync với MongoDB replica set thật', () => {
       event(userId, 4, {
         action: 'UPDATE_EMAIL',
         email: 'new@example.com',
-        role: 'vip',
+        role: 'user',
       }),
     );
     const user = await users.findById(userId).lean();
     expect(user?.username).toBe('Edited');
-    expect(user?.role).toBe('vip');
+    expect(user?.role).toBe('user');
     expect(user?.email).toBe('new@example.com');
     await service.handle(event(userId, 5, { action: 'DELETE' }));
     await service.handle(latest);
@@ -91,7 +91,7 @@ integration('User sync với MongoDB replica set thật', () => {
         service.handle(
           event(userId, version, {
             email: 'concurrent@example.com',
-            role: version === 3 ? 'vip' : 'user',
+            role: version === 3 ? 'admin' : 'user',
           }),
         ),
       ),
@@ -102,11 +102,11 @@ integration('User sync với MongoDB replica set thật', () => {
         await service.handle(
           event(userId, [1, 3, 2][i], {
             email: 'concurrent@example.com',
-            role: [1, 3, 2][i] === 3 ? 'vip' : 'user',
+            role: [1, 3, 2][i] === 3 ? 'admin' : 'user',
           }),
         );
     }
     expect((await states.findById(userId).lean())?.version).toBe(3);
-    expect((await users.findById(userId).lean())?.role).toBe('vip');
+    expect((await users.findById(userId).lean())?.role).toBe('admin');
   });
 });

@@ -10,7 +10,7 @@ describe('User nhận sự kiện outbox', () => {
     userId: '507f1f77bcf86cd799439011',
     action: 'UPDATE_ROLE',
     email: 'new@example.com',
-    role: 'vip',
+    role: 'user',
     username: 'Tên ban đầu',
   };
   function setup(currentVersion?: number) {
@@ -73,7 +73,7 @@ describe('User nhận sự kiện outbox', () => {
     expect(users.updateOne).toHaveBeenCalledWith(
       { _id: message.userId },
       {
-        $set: { email: message.email, role: 'vip' },
+        $set: { email: message.email, role: 'user' },
         $setOnInsert: { username: 'Tên ban đầu' },
       },
       { upsert: true, session, runValidators: true },

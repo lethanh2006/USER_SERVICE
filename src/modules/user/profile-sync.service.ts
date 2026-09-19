@@ -47,7 +47,7 @@ export class ProfileSyncService implements OnModuleInit {
         : {
             username: requiredString(message.username),
             email: requiredString(message.email),
-            role: requiredString(message.role),
+            role: normalizeUserRole(message.role),
           };
     await this.users.db.transaction(
       async (session) => {
@@ -91,4 +91,10 @@ function requiredString(value: unknown): string {
   if (typeof value !== 'string' || !value.trim())
     throw new InvalidProfileSyncMessage('Missing event field');
   return value;
+}
+
+function normalizeUserRole(role: unknown): 'admin' | 'user' {
+  return typeof role === 'string' && role.trim().toLowerCase() === 'admin'
+    ? 'admin'
+    : 'user';
 }

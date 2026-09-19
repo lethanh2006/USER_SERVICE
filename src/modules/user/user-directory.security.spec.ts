@@ -46,14 +46,11 @@ describe('User directory security', () => {
     expect(sort).toHaveBeenCalledWith({ username: 1, _id: 1 });
   });
 
-  it.each(['user', 'vip', 'manager', 'chef', 'cashier', 'waiter'])(
-    'ẩn email và vai trò khỏi %s',
-    async (role) => {
-      const { service, select } = createService();
+  it.each(['user'])('ẩn email và vai trò khỏi %s', async (role) => {
+    const { service, select } = createService();
 
-      await service.getAllUsers({ _id: 'viewer-id', role });
+    await service.getAllUsers({ _id: 'viewer-id', role });
 
-      expect(select).toHaveBeenCalledWith({ _id: 1, username: 1 });
-    },
-  );
+    expect(select).toHaveBeenCalledWith({ _id: 1, username: 1 });
+  });
 });
