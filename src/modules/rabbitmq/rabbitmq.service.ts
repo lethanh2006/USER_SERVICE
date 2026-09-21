@@ -14,9 +14,9 @@ import {
 import * as amqp from 'amqplib';
 import { randomUUID } from 'node:crypto';
 import { InvalidProfileSyncMessage } from '../user/profile-sync.service';
-import { SAFE_REQUEST_ID } from '../../common/middleware/request-id.middleware';
+import { toError } from '../../common/error.util';
+import { SAFE_REQUEST_ID } from '../../common/request-id.middleware';
 import { appLogger } from '../../common/observability/app-logger';
-import { toError } from '../../common/utils/error.util';
 
 export interface RabbitMessageMetadata {
   queueName: string;

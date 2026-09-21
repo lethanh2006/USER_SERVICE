@@ -11,7 +11,7 @@ import {
   parseAuthenticatedUser,
   RequestWithAuthenticatedUser,
 } from '../interfaces/authenticated-user.interface';
-import { GatewaySignatureService } from '../security/gateway-signature.service';
+import { GatewaySignatureService } from '../gateway-signature.service';
 
 @Injectable()
 export class GatewayIdentityGuard implements CanActivate {
