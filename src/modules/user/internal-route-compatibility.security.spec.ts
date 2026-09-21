@@ -14,6 +14,13 @@ const controllerHandler = (name: string): object => {
 };
 
 describe('User internal route compatibility', () => {
+  it('requires a signed identity for the directory batch with admin-dependent fields', () => {
+    const guards = Reflect.getMetadata(
+      GUARDS_METADATA,
+      controllerHandler('getDirectoryUsers'),
+    ) as unknown[];
+    expect(guards).toContain(GatewayIdentityGuard);
+  });
   it('giữ lookup tương thích không yêu cầu chữ ký', () => {
     const guards = Reflect.getMetadata(
       GUARDS_METADATA,

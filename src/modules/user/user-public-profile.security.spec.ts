@@ -1,5 +1,5 @@
 import type { Model } from 'mongoose';
-import type { StructuredLoggerService } from '../../common/observability/structured-logger.service';
+import type { StructuredLoggerService } from '../../common/logging/logger';
 import type { UserDocument } from '../../schemas/user.schema';
 import { UserService } from './user.service';
 

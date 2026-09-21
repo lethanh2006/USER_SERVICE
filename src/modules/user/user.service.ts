@@ -2,7 +2,7 @@ import { InvalidProfileSyncMessage } from './profile-sync.service';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { StructuredLoggerService } from '../../common/observability/structured-logger.service';
+import { StructuredLoggerService } from '../../common/logging/logger';
 import type { RabbitMessageMetadata } from '../rabbitmq/rabbitmq.service';
 import { User, UserDocument } from '../../schemas/user.schema';
 import type { CreateProfileDto } from './dto/create-profile.dto';
@@ -47,7 +47,7 @@ export class UserService {
   }
 
   async getMyProfile(userId: string) {
-    const user = await this.userModel.findById(userId);
+    const user = await this.userModel.findById(userId).lean().exec();
     if (!user) {
       throw this.httpError(
         HttpStatus.UNAUTHORIZED,
@@ -55,6 +55,29 @@ export class UserService {
       );
     }
     return { user };
+  }
+
+  async getPublicUsers(ids: string[]) {
+    return this.getDirectoryUsers(ids, { _id: '', role: 'user' });
+  }
+
+  async getDirectoryUsers(ids: string[], viewer: AuthenticatedUser) {
+    if (ids.length === 0) return { users: [] };
+    const isAdmin = viewer.role?.toLowerCase() === 'admin';
+    const users = await this.userModel
+      .find({ _id: { $in: ids } })
+      .select(
+        isAdmin
+          ? { _id: 1, username: 1, email: 1, role: 1 }
+          : { _id: 1, username: 1 },
+      )
+      .lean()
+      .exec();
+    return {
+      users: users.map(({ _id, username, email, role }) =>
+        isAdmin ? { _id, username, email, role } : { _id, username },
+      ),
+    };
   }
 
   async updateName(userId: string, dto: UpdateNameDto) {
@@ -157,10 +180,7 @@ export class UserService {
           _id: userId,
           username: this.requiredString(message.username, 'username'),
           email: this.requiredString(message.email, 'email'),
-          role:
-            typeof message.role === 'string' && message.role
-              ? message.role
-              : 'user',
+          role: normalizeUserRole(message.role),
         });
         this.logger.info('rabbitmq_message_processed', {
           ...logContext,
@@ -196,7 +216,7 @@ export class UserService {
     if (action === 'UPDATE_ROLE') {
       const user = await this.userModel.findById(userId);
       if (user) {
-        user.role = this.requiredString(message.role, 'role');
+        user.role = normalizeUserRole(message.role);
         await user.save();
         this.logger.info('rabbitmq_message_processed', {
           ...logContext,
@@ -239,4 +259,10 @@ export class UserService {
   private httpError(status: HttpStatus, message: string): HttpException {
     return new HttpException({ message }, status);
   }
+}
+
+function normalizeUserRole(role: unknown): 'admin' | 'user' {
+  return typeof role === 'string' && role.trim().toLowerCase() === 'admin'
+    ? 'admin'
+    : 'user';
 }

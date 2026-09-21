@@ -1,7 +1,7 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import type { Model } from 'mongoose';
 import { GatewayIdentityGuard } from '../../common/guards/gateway-identity.guard';
-import type { StructuredLoggerService } from '../../common/observability/structured-logger.service';
+import type { StructuredLoggerService } from '../../common/logging/logger';
 import type { UserDocument } from '../../schemas/user.schema';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';

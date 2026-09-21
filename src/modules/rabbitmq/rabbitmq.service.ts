@@ -7,16 +7,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   createErrorId,
-  injectTraceHeaders,
   runWithLogContext,
-  withMessageSpan,
+  SAFE_REQUEST_ID,
 } from '@nrapp/observability';
 import * as amqp from 'amqplib';
 import { randomUUID } from 'node:crypto';
 import { InvalidProfileSyncMessage } from '../user/profile-sync.service';
-import { toError } from '../../common/error.util';
-import { SAFE_REQUEST_ID } from '../../common/request-id.middleware';
-import { appLogger } from '../../common/observability/app-logger';
+import { toError } from '../../common/utils/error.util';
+import { appLogger } from '../../common/logging/logger';
 
 export interface RabbitMessageMetadata {
   queueName: string;
@@ -67,31 +65,16 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     const channel = this.channel;
     if (!channel) throw new Error('RabbitMQ channel is not initialized');
 
-    await withMessageSpan(
-      `${queueName} publish`,
-      {},
-      async () => {
-        await channel.assertQueue(queueName, { durable: true });
-        const headers = injectTraceHeaders(
-          requestId && SAFE_REQUEST_ID.test(requestId)
-            ? { 'x-request-id': requestId }
-            : {},
-        );
-        channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
-          persistent: true,
-          contentType: 'application/json',
-          headers,
-        });
-      },
-      {
-        kind: 3,
-        attributes: {
-          'messaging.system': 'rabbitmq',
-          'messaging.destination.name': queueName,
-          'messaging.operation.type': 'publish',
-        },
-      },
-    );
+    await channel.assertQueue(queueName, { durable: true });
+    const headers =
+      requestId && SAFE_REQUEST_ID.test(requestId)
+        ? { 'x-request-id': requestId }
+        : {};
+    channel.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
+      persistent: true,
+      contentType: 'application/json',
+      headers,
+    });
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -217,65 +200,49 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         ? requestIdHeader
         : undefined;
 
-    await withMessageSpan(
-      `${queueName} process`,
-      rawHeaders,
-      async (span) =>
-        runWithLogContext(
-          { ...(requestId ? { request_id: requestId } : {}) },
-          async () => {
-            try {
-              const content = JSON.parse(message.content.toString()) as unknown;
-              await callback(content, {
-                queueName,
-                ...(requestId ? { requestId } : {}),
-              });
-              channel.ack(message);
-            } catch (exception: unknown) {
-              const error = toError(exception);
-              const errorId = createErrorId();
-              span.setAttribute('error.id', errorId);
-              span.setAttribute('error.code', 'MESSAGE_PROCESSING_FAILED');
-              appLogger.error(
-                {
-                  'event.name': 'rabbitmq.message.failed',
-                  'error.id': errorId,
-                  'error.code': 'MESSAGE_PROCESSING_FAILED',
-                  'error.expected': false,
-                  'messaging.system': 'rabbitmq',
-                  'messaging.destination.name': queueName,
-                  'messaging.operation.type': 'process',
-                  ...(requestId ? { request_id: requestId } : {}),
-                  'exception.type': error.name,
-                  'exception.message': error.message,
-                  ...(error.stack
-                    ? { 'exception.stacktrace': error.stack }
-                    : {}),
-                },
-                'RabbitMQ message processing failed',
-              );
-              try {
-                const retryable =
-                  !(exception instanceof InvalidProfileSyncMessage) &&
-                  !(exception instanceof SyntaxError);
-                await this.retryOrPark(channel, queueName, message, retryable);
-              } catch (nackException: unknown) {
-                this.logger.warn(
-                  `Không thể nack RabbitMQ message: ${
-                    toError(nackException).message
-                  }`,
-                );
-              }
-              throw error;
-            }
-          },
-        ),
-      {
-        attributes: {
-          'messaging.system': 'rabbitmq',
-          'messaging.destination.name': queueName,
-          'messaging.operation.type': 'process',
-        },
+    await runWithLogContext(
+      { ...(requestId ? { request_id: requestId } : {}) },
+      async () => {
+        try {
+          const content = JSON.parse(message.content.toString()) as unknown;
+          await callback(content, {
+            queueName,
+            ...(requestId ? { requestId } : {}),
+          });
+          channel.ack(message);
+        } catch (exception: unknown) {
+          const error = toError(exception);
+          const errorId = createErrorId();
+          appLogger.error(
+            {
+              'event.name': 'rabbitmq.message.failed',
+              'error.id': errorId,
+              'error.code': 'MESSAGE_PROCESSING_FAILED',
+              'error.expected': false,
+              'messaging.system': 'rabbitmq',
+              'messaging.destination.name': queueName,
+              'messaging.operation.type': 'process',
+              ...(requestId ? { request_id: requestId } : {}),
+              'exception.type': error.name,
+              'exception.message': error.message,
+              ...(error.stack ? { 'exception.stacktrace': error.stack } : {}),
+            },
+            'RabbitMQ message processing failed',
+          );
+          try {
+            const retryable =
+              !(exception instanceof InvalidProfileSyncMessage) &&
+              !(exception instanceof SyntaxError);
+            await this.retryOrPark(channel, queueName, message, retryable);
+          } catch (nackException: unknown) {
+            this.logger.warn(
+              `Không thể nack RabbitMQ message: ${
+                toError(nackException).message
+              }`,
+            );
+          }
+          throw error;
+        }
       },
     ).catch(() => undefined);
   }

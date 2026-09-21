@@ -5,10 +5,8 @@ import {
   HttpStatus,
   Injectable,
 } from '@nestjs/common';
-import {
-  parseAuthenticatedUser,
-  RequestWithAuthenticatedUser,
-} from '../interfaces/authenticated-user.interface';
+import type { RequestWithAuthenticatedUser } from '../interfaces/authenticated-user.interface';
+import { parseAuthenticatedUser } from '../utils/authenticated-user.util';
 
 @Injectable()
 export class UserPayloadGuard implements CanActivate {
