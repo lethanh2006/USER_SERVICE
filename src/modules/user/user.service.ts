@@ -18,8 +18,18 @@ interface ProfileSyncMessage {
   role?: unknown;
 }
 
+const MY_PROFILE_CACHE_TTL_MS = 5_000;
+const MAX_MY_PROFILE_CACHE_ENTRIES = 512;
+
 @Injectable()
 export class UserService {
+  private readonly completedProfileReads = new Map<
+    string,
+    { expiresAt: number; value: unknown }
+  >();
+  private readonly pendingProfileReads = new Map<string, Promise<unknown>>();
+  private profileReadGeneration = 0;
+
   constructor(
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
@@ -40,6 +50,7 @@ export class UserService {
       username: dto.username,
       email: dto.email,
     });
+    this.invalidateProfileReads();
     return {
       message: 'User profile created successfully.',
       user,
@@ -47,14 +58,55 @@ export class UserService {
   }
 
   async getMyProfile(userId: string) {
-    const user = await this.userModel.findById(userId).lean().exec();
-    if (!user) {
-      throw this.httpError(
-        HttpStatus.UNAUTHORIZED,
-        'Phiên đăng nhập không còn hợp lệ.',
-      );
+    const generation = this.profileReadGeneration;
+    const key = `${generation}:${userId}`;
+    const cached = this.completedProfileReads.get(key);
+    if (cached && cached.expiresAt > Date.now()) return { user: cached.value };
+    if (cached) this.completedProfileReads.delete(key);
+
+    let pending = this.pendingProfileReads.get(key);
+    if (!pending) {
+      pending = this.userModel.findById(userId).lean().exec();
+      if (this.pendingProfileReads.size < MAX_MY_PROFILE_CACHE_ENTRIES) {
+        this.pendingProfileReads.set(key, pending);
+      }
     }
-    return { user };
+    try {
+      const user = await pending;
+      if (!user) {
+        throw this.httpError(
+          HttpStatus.UNAUTHORIZED,
+          'Phiên đăng nhập không còn hợp lệ.',
+        );
+      }
+      if (generation === this.profileReadGeneration) {
+        this.rememberProfileRead(key, user);
+      }
+      return { user };
+    } finally {
+      if (this.pendingProfileReads.get(key) === pending) {
+        this.pendingProfileReads.delete(key);
+      }
+    }
+  }
+
+  private rememberProfileRead(key: string, value: unknown): void {
+    if (this.completedProfileReads.size >= MAX_MY_PROFILE_CACHE_ENTRIES) {
+      const oldestKey: string | undefined = Array.from(
+        this.completedProfileReads.keys(),
+      )[0];
+      if (oldestKey !== undefined) this.completedProfileReads.delete(oldestKey);
+    }
+    this.completedProfileReads.set(key, {
+      expiresAt: Date.now() + MY_PROFILE_CACHE_TTL_MS,
+      value,
+    });
+  }
+
+  private invalidateProfileReads(): void {
+    // Local writes and profile-sync events invalidate the one-replica cache.
+    this.profileReadGeneration += 1;
+    this.completedProfileReads.clear();
   }
 
   async getPublicUsers(ids: string[]) {
@@ -89,6 +141,7 @@ export class UserService {
     if (dto.username) {
       user.username = dto.username;
       await user.save();
+      this.invalidateProfileReads();
     }
 
     return {
@@ -146,6 +199,7 @@ export class UserService {
 
     user.role = dto.role;
     await user.save();
+    this.invalidateProfileReads();
     return {
       message: 'User role updated successfully.',
       user,
@@ -182,6 +236,7 @@ export class UserService {
           email: this.requiredString(message.email, 'email'),
           role: normalizeUserRole(message.role),
         });
+        this.invalidateProfileReads();
         this.logger.info('rabbitmq_message_processed', {
           ...logContext,
           outcome: 'profile_created',
@@ -200,6 +255,7 @@ export class UserService {
       if (user) {
         user.email = this.requiredString(message.email, 'email');
         await user.save();
+        this.invalidateProfileReads();
         this.logger.info('rabbitmq_message_processed', {
           ...logContext,
           outcome: 'email_updated',
@@ -218,6 +274,7 @@ export class UserService {
       if (user) {
         user.role = normalizeUserRole(message.role);
         await user.save();
+        this.invalidateProfileReads();
         this.logger.info('rabbitmq_message_processed', {
           ...logContext,
           outcome: 'role_updated',
@@ -233,6 +290,7 @@ export class UserService {
 
     if (action === 'DELETE') {
       await this.userModel.findByIdAndDelete(userId);
+      this.invalidateProfileReads();
       this.logger.info('rabbitmq_message_processed', {
         ...logContext,
         outcome: 'profile_deleted',
